@@ -1,0 +1,110 @@
+---
+title: "MBA 6693 Business Analytics"
+author: 'Name: Vinayak B. Menon'
+date: "18/07/2020"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+  word_document: default
+subtitle: 'Assignment 2: Classification Models' 
+---
+
+```{r setup,echo=FALSE,warning=FALSE,include=FALSE}
+rm(list=ls())
+library(psych)
+library(MASS)
+library(ggplot2)
+library(ISLR)
+library(data.table)
+#datatable Carseats data
+week_ret <- as.data.table(Weekly,stringasFactors=FALSE)
+week_ret <- week_ret[,c(2,7,8,9)]
+#collecting sample of rows to choose for training set
+train_prop <- sample(nrow(week_ret),.75*nrow(week_ret))
+week_ret_train <- week_ret[train_prop,]
+week_ret_test <- week_ret[!train_prop,]
+```
+
+
+\textbf{Objective:}\
+
+This report aims to model the relationship between direction of the $SP500$ index and 3 variables: the percentage returns from the previous week $Lag1$, the volume of shares traded $Volume$ and the percentage return of this week $Today$. We compare the effectiveness of logistic regression and LDA and arrive at the best representative model.\
+
+
+\textbf{Data Exploration:}\
+
+ The $Weekly$ data, from the $ISLR$ package, is the dataset under consideration and has weekly observations from 1990 to 2010. We restrict our predictor variables to $Lag1$, $Today$ and $Volume$ and we shall form a model that predicts $Direction$. We summarize the key values of the dataset below.\
+```{r 1_1}
+head(week_ret)
+summary(week_ret)
+```
+
+We now plot the histograms for each of the numeric independent factors to see if there are any widely deviating values:
+```{r 1_3}
+#histogram output
+par(mfrow=c(3,1))
+hist(week_ret$Lag1,xlab = "Lag 1 returns",main="Histogram of Lag 1 returns")
+hist(week_ret$Today,xlab = "Current week returns",main="Histogram of current returns")
+hist(week_ret$Volume,xlab = "Volume",main="Histogram of Volume")
+```
+Note the decreasing trend in the Volume histogram. This is most likely due to the high volume of trades that would have occured specifically in crisis situations. In normal markets, the trades lie on the lower end.\
+Now we plot the bar graph of the market direction. 
+```{r 1_35}
+#barplot
+ggplot(data = week_ret) +
+  geom_bar(mapping = aes(x = Direction))
+```
+The $Up$ direction seems to be more in frequency as compared to $Down$ by atleast a 100. We further check the bivariate analysis of the variables under consideration.
+```{r 1_4}
+#paired plots
+pairs.panels(week_ret, 
+             method = "pearson", # correlation method
+             hist.col = "#00AFBB",
+             density = TRUE,  # show density plots
+             main="Scatter plots of Weekly data",)
+```
+ Notice that there is a strong relationship between the current weekly returns and the market direction. This is obvious since the market movement is essentially a measure of the current return with respect to the previous return.\
+ 
+We first begin with the logistic regression model.
+```{r 2_1}
+#Model 1,
+logistic_fit <- glm(Direction ~Lag1+Volume+Today, data = week_ret_train,family = binomial,maxit=1)
+summary(logistic_fit)
+```
+Including all 3 variables, we see that there is a strong positive relationship between the current week returns and the market movement. Based on the p-values, the remaining two variables does not significantly affect the direction.\
+We now move on the LDA model with the same variables.
+```{r 2_2}
+#Model 4
+lda_fit <- lda(Direction ~Volume+Lag1+Today, data = week_ret_train)
+lda_fit
+```
+Now we proceed to calculating the error rates between the LDA and all logistic models under consideration. We first create the confusion matrix for the logistic regression model:
+```{r 2_3}
+#Creating dataframe for out of sample error rate
+out_sample_err <- data.frame(matrix(0,nrow = 1,ncol = 2),row.names = c("Error Rate"))
+colnames(out_sample_err) <- c("Logistic","LDA")
+#calculating the probabilities associated for each category
+logistic_prob <- round(predict(logistic_fit, week_ret_test, type = "response"))
+#assigning categories over the responses
+Model_1 <- rep("Down",nrow(week_ret_test))
+Model_1[logistic_prob > 0.5] <- "Up"
+#confusion matrix
+table(Model_1, week_ret_test$Direction)
+```
+Notice that there are 13 errors noted here. We obtain the confusion matrix of the LDA model predictions:
+```{r 2_6}
+#Predicting the values from LDA
+lda_pred <- predict(lda_fit, week_ret_test)
+#Confusion matrix
+table(lda_pred$class, week_ret_test$Direction)
+```
+The matrix looks the same as the logistic model. Now we calculate the out of sample error rate which would likely be the same.
+```{r 2_5}
+#Out of Sample error
+out_sample_err$Logistic <- mean(Model_1!=week_ret_test$Direction)
+out_sample_err$LDA <- mean(lda_pred$class!=week_ret_test$Direction)
+out_sample_err
+```
+We see that both the logistic and LDA models manage to perform equally well in representing the market direction based on the three considered variables.
+
